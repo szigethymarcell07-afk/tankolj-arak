@@ -1,0 +1,11 @@
+{
+  "name": "tankolj-arak",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Price data for the TankoljOkosan app, refreshed every 3 hours by GitHub Actions and published on GitHub Pages",
+  "scripts": {
+    "prices": "node scripts/update-prices.mjs && node scripts/update-station-prices.mjs",
+    "site": "node scripts/build-site.mjs"
+  }
+}

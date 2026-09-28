@@ -1,0 +1,64 @@
+name: Árfrissítés
+
+# Every 3 hours: download the prices, commit them when they changed, publish _site/prices.json on GitHub Pages.
+# A push to main (e.g. a new stations.json) also republishes.
+on:
+  schedule:
+    - cron: '17 */3 * * *' # UTC, off the full hour (scheduled runs can start a few minutes late)
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # commit the updated price files
+  pages: write
+  id-token: write
+
+concurrency:
+  group: prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # Official averages: --soft skips when downloaded in the last 6 hours and never fails
+      - name: Országos átlagár
+        run: node scripts/update-prices.mjs --soft
+
+      # Per-station prices: fails (and keeps the last published prices) when the source is unreachable
+      - name: Kútárak
+        run: node scripts/update-station-prices.mjs
+
+      # The price file is only rewritten when a price changed or a new day started. These commits also keep
+      # the schedule alive: GitHub disables scheduled workflows after 60 days without repository activity.
+      - name: Változások mentése
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add src/data/stationPrices.json src/data/priceReference.json
+          if git diff --cached --quiet; then
+            echo "Nincs árváltozás."
+          else
+            git commit -m "Árak frissítése $(date -u +'%Y-%m-%d %H:%M') UTC"
+            git push
+          fi
+
+      - name: Közzétett fájl összeállítása
+        run: node scripts/build-site.mjs
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4
