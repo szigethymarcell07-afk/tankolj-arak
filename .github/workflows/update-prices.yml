@@ -2,7 +2,7 @@ name: Árfrissítés
 
 # Every 3 hours: download the prices, commit them when they changed, publish _site/prices.json on GitHub Pages.
 # Once a day (and on a manual run) also the EV charging sites from OpenStreetMap -> _site/chargers.json.
-# A push to main (e.g. a new stations.json) also republishes.
+# A push to main (e.g. a new stations.json or hand-edited evTariffs.json, published inside prices.json) also republishes.
 on:
   schedule:
     - cron: '17 */3 * * *' # prices; UTC, off the full hour (scheduled runs can start a few minutes late)
@@ -64,6 +64,7 @@ jobs:
             git push
           fi
 
+      # Also checks src/data/evTariffs.json: on an error it leaves the tariffs out, publishes the rest and fails
       - name: Közzétett fájl összeállítása
         if: ${{ !cancelled() }}
         run: node scripts/build-site.mjs

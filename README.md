@@ -1,12 +1,12 @@
 # tankolj-arak
 
-A **TankoljOkosan** iOS-app árai és töltői. A GitHub Actions 3 óránként letölti a friss árakat, naponta egyszer
-a töltőket, és a GitHub Pages-en közzéteszi őket. Az app induláskor és előtérbe hozáskor innen tölti le az
-adatokat, így a frissítésükhöz nem kell App Store-frissítés.
+A **TankoljOkosan** iOS-app árai, töltői és töltési díjai. A GitHub Actions 3 óránként letölti a friss árakat,
+naponta egyszer a töltőket, és a GitHub Pages-en közzéteszi őket. A töltési díjakat itt kézzel kell frissíteni. Az
+app induláskor és előtérbe hozáskor innen tölti le az adatokat, így a frissítésükhöz nem kell App Store-frissítés.
 
 Közzétett fájlok:
-- `https://szigethymarcell07-afk.github.io/tankolj-arak/prices.json`: árak, és egy rövid leírás a töltőlistáról
-  (`chargers`: verzió, dátum, darabszám);
+- `https://szigethymarcell07-afk.github.io/tankolj-arak/prices.json`: az árak, a töltési díjak (`evTariffs`) és
+  egy rövid leírás a töltőlistáról (`chargers`: verzió, dátum, darabszám);
 - `https://szigethymarcell07-afk.github.io/tankolj-arak/chargers.json`: a töltőlista. Az app csak akkor tölti le,
   ha a leírás szerint újabb, mint ami nála van.
 
@@ -23,11 +23,38 @@ Közzétett fájlok:
    hibát jelez, a régi árak maradnak, a többi lépés (mentés, közzététel) lefut.
 3. Ha változott valami, commitolja az ár- és töltőfájlokat. Ezek a commitok egyben életben tartják az ütemezést: a GitHub
    60 nap aktivitás nélkül kikapcsolja az ütemezett workflow-kat.
-4. `scripts/build-site.mjs` összeállítja a `_site/prices.json`-t és a `_site/chargers.json`-t, és a Pages
-   közzéteszi őket.
+4. `scripts/build-site.mjs` összeállítja a `_site/prices.json`-t (benne a `src/data/evTariffs.json` díjaival) és a
+   `_site/chargers.json`-t, és a Pages közzéteszi őket.
 
 A workflow kézzel is indítható (Actions → Árfrissítés → Run workflow), és minden `main`-re történő push is
-újra közzéteszi az árakat.
+újra közzéteszi az adatokat.
+
+## Töltési díjak frissítése (`src/data/evTariffs.json`)
+
+Ha egy töltőhálózat árat változtat, ebben a fájlban kell átírni, és pusholni. A push után pár percen belül
+kint van, az app a következő megnyitáskor átveszi. Az appban lévő példány csak tartalék.
+
+```bash
+# a díjak átírása után:
+npm run site     # ellenőrzi a fájlt; hibánál kiírja, melyik hálózatnál és sávnál van a gond
+git add src/data/evTariffs.json && git commit -m "Töltési díjak frissítése" && git push
+```
+
+A fájl felépítése:
+- `checked`: az ellenőrzés napja (`"2026-09-27"`), az app a forrásnál kiírja. Új ellenőrzésnél írd át.
+- `networks`: hálózatonként `abbr`, `color`, `textColor` (a jelvény), `bands` (díjsávok), `note`, és ha kell,
+  `memberNote`, `nightNote`, `source` (`label`, `url`).
+- Egy sáv: `dc` (`true` = DC, `false` = AC), `upToKw` (eddig a teljesítményig érvényes; `null` = nincs felső
+  határ), és legalább egy ár Ft/kWh-ban: `adhoc` (eseti, bankkártya/QR), `app` (applikációval), `member`
+  (tagsággal), `night` (éjszakai). Helyszínenként eltérő árnál `[min, max]`. Az app az első illeszkedő sávot
+  használja, ezért a sávok teljesítmény szerint növekvő sorrendben legyenek.
+- Az `"Egyéb töltő"` hálózatnak mindig benne kell lennie (az ismeretlen hálózatok ezt kapják).
+
+Hibás fájlnál a `build-site.mjs` kihagyja a díjakat a `prices.json`-ból (az appban a korábbi díjak maradnak), az
+árak közzététele folytatódik, de a futás pirosan jelez az Actions fülön.
+
+A hálózatnevek a `scripts/build-chargers.mjs` `NETWORK_RULES` listájából jönnek. Új hálózatnál oda is fel kell
+venni (az app repójában is), különben a töltői „Egyéb töltő”-ként jelennek meg.
 
 ## Kapcsolat az app repójával
 
@@ -41,6 +68,10 @@ cp ../benzinkút/src/data/stations.json src/data/
 cp ../benzinkút/scripts/.cache/places.json scripts/.cache/
 git add -A && git commit -m "Kútlista / szkriptek frissítése az appból" && git push
 ```
+
+A töltési díjaknál fordított az irány: az `src/data/evTariffs.json` fő példánya itt van. Az appba beépítettet
+időnként érdemes frissíteni (az app repójában: `cp ../tankolj-arak/src/data/evTariffs.json src/data/`), de ez nem
+kötelező.
 
 A `src/data/chargers.json`-t itt a workflow frissíti; az appba beépítettet időnként (`npm run chargers` az
 appban) érdemes frissíteni, de ez nem kötelező.

@@ -1,0 +1,123 @@
+{
+  "version": 1,
+  "checked": "2026-09-27",
+  "networks": {
+    "Mobiliti": {
+      "abbr": "MOB", "color": "#00A19A", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": 22, "app": 225 },
+        { "dc": true, "upToKw": 49, "app": 225 },
+        { "dc": true, "upToKw": 149, "app": 250 },
+        { "dc": true, "upToKw": null, "app": 269 }
+      ],
+      "note": "A töltők többségének listaára a Mobiliti appban; egyes töltőknél 170–330 Ft/kWh. Kijelölt DC töltőkön 10–15 óra között 160 Ft/kWh (Happy Hour).",
+      "source": { "label": "mobiliti.hu – díjszabás 2026 szeptembertől", "url": "https://www.mobiliti.hu/emobilitas/nyilvanos-toltes/mennyiert-tolthetek-regisztralt-ugyfelkent/dijak" }
+    },
+    "Lidl": {
+      "abbr": "LI", "color": "#0050AA", "textColor": "#FFF000",
+      "bands": [
+        { "dc": false, "upToKw": null, "app": 149 },
+        { "dc": true, "upToKw": null, "app": 179 }
+      ],
+      "note": "A Lidl-áruházak töltőit a Mobiliti üzemelteti; az ár a Mobiliti appban érvényes.",
+      "source": { "label": "mobiliti.hu – díjszabás 2026 szeptembertől", "url": "https://www.mobiliti.hu/emobilitas/nyilvanos-toltes/mennyiert-tolthetek-regisztralt-ugyfelkent/dijak" }
+    },
+    "E.ON Drive": {
+      "abbr": "EON", "color": "#EA1C0A", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": 50, "adhoc": 199, "night": 149 },
+        { "dc": true, "upToKw": 50, "adhoc": 199, "night": 149 },
+        { "dc": true, "upToKw": 150, "adhoc": 249, "night": 187 },
+        { "dc": true, "upToKw": null, "adhoc": 299, "night": 224 }
+      ],
+      "nightNote": "22 és 7 óra között 25%-kal olcsóbb; a 300 kW-os töltőkön 10–14 óra között 224 Ft/kWh.",
+      "note": "Helyszíni (bankkártyás vagy QR-kódos) indításkor érvényes díjak.",
+      "source": { "label": "EDRI tarifák 2026. január 17-től, kiegészítve 2026. augusztus 3-án (Villanyautósok)", "url": "https://villanyautosok.hu/2026/08/03/az-e-on-is-a-rendkivuli-helyzethez-igazitja-a-villanyauto-toltoit/" }
+    },
+    "MOL Plugee": {
+      "abbr": "MP", "color": "#00843D", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": null, "adhoc": 169, "app": 159, "member": 149 },
+        { "dc": true, "upToKw": 99, "adhoc": 289, "app": 269, "member": 259 },
+        { "dc": true, "upToKw": null, "adhoc": 299, "app": 289, "member": 279 }
+      ],
+      "memberNote": "MOL Move-fiókkal összekötött appal.",
+      "note": "DC töltőkön 30 perc után +0,5 Ft/perc.",
+      "source": { "label": "molplugee.hu – Áraink", "url": "https://molplugee.hu/hu/araink" }
+    },
+    "Shell Recharge": {
+      "abbr": "SR", "color": "#FFD100", "textColor": "#8B0000",
+      "bands": [
+        { "dc": false, "upToKw": null, "adhoc": 199 },
+        { "dc": true, "upToKw": 100, "adhoc": 289 },
+        { "dc": true, "upToKw": null, "adhoc": 299 }
+      ],
+      "note": "Eseti töltésnél ideiglenesen 14 999 Ft kerül zárolásra a bankkártyán.",
+      "source": { "label": "shell.hu – Töltési árak", "url": "https://www.shell.hu/elektromos-auto-toltes/arazas.html" }
+    },
+    "OMV eMotion": {
+      "abbr": "OE", "color": "#004B87", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": null, "adhoc": 299, "app": 279, "member": 209 },
+        { "dc": true, "upToKw": null, "adhoc": 299, "app": 279, "member": 209 }
+      ],
+      "memberNote": "Premium Plus díjcsomag, 4 499 Ft havidíj.",
+      "source": { "label": "omv.hu – OMV eMotion díjcsomagok", "url": "https://www.omv.hu/hu/utazas/omv-emotion/dijcsomagok" }
+    },
+    "Tesla": {
+      "abbr": "T", "color": "#CC0000", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": true, "upToKw": null, "app": 142, "night": [94, 111] }
+      ],
+      "nightNote": "Csúcsidőn kívül (kb. 22/23–8 óra). Néhány helyszínen fix ár: Szombathely, Pécs 142, Sormás 158, Győr 162 Ft/kWh.",
+      "note": "Dinamikus, helyszínenkénti ár a Tesla appban; nem Tesla autóval tagság nélkül drágább.",
+      "source": { "label": "e-cars.hu, 2026. augusztus 8.", "url": "https://e-cars.hu/2026/08/08/tesla-toltoar-magyarorszag-visszaallt/" }
+    },
+    "IONITY": {
+      "abbr": "IO", "color": "#232B5C", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": true, "upToKw": null, "adhoc": [265, 287], "member": 159 }
+      ],
+      "memberNote": "Ionity Power előfizetéssel (4 720 Ft/hó); Motion: 199 Ft/kWh, 2 340 Ft/hó.",
+      "source": { "label": "Villanyautósok, 2026. augusztus 31.", "url": "https://villanyautosok.hu/2026/08/31/vegre-ad-ceges-szamlat-az-ionity/" }
+    },
+    "Penny": {
+      "abbr": "PE", "color": "#CD1719", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": null, "app": 179 },
+        { "dc": true, "upToKw": null, "app": 179 }
+      ],
+      "note": "A Polyfazer appal indítható. Az utolsó közzétett ár 2025-ös; 2026-os változásról nincs hír.",
+      "source": { "label": "Villanyautósok – töltési árak", "url": "https://villanyautosok.hu/elektromos-auto-toltes-arak/" }
+    },
+    "Parkl": {
+      "abbr": "PK", "color": "#6D4AFF", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": null, "app": [149, 200] },
+        { "dc": true, "upToKw": null, "app": [149, 200] }
+      ],
+      "note": "Helyszínenként eltér; a pontos ár a Parkl appban látható.",
+      "source": { "label": "Villanyautósok – töltési árak", "url": "https://villanyautosok.hu/elektromos-auto-toltes-arak/" }
+    },
+    "ALTE-GO": {
+      "abbr": "AG", "color": "#00B2A9", "textColor": "#FFFFFF",
+      "bands": [
+        { "dc": false, "upToKw": null, "app": [149, 295] },
+        { "dc": true, "upToKw": null, "app": [149, 295] }
+      ],
+      "note": "Oszloponként eltér; egyes helyeken 120 perc után +10 Ft/perc.",
+      "source": { "label": "Villanyautósok – töltési árak", "url": "https://villanyautosok.hu/elektromos-auto-toltes-arak/" }
+    },
+    "TEA": {
+      "abbr": "TEA", "color": "#7A9A01", "textColor": "#FFFFFF",
+      "bands": [],
+      "note": "A TEA. hálózat töltőit franchise-partnerek üzemeltetik, az ár helyszínenként eltér: a Teapont appban látható.",
+      "source": { "label": "teapont.hu", "url": "https://www.teapont.hu/" }
+    },
+    "Egyéb töltő": {
+      "abbr": "⚡", "color": "#475569", "textColor": "#FFFFFF",
+      "bands": [],
+      "note": "Ennél az üzemeltetőnél nincs nyilvános, ellenőrzött díjszabás."
+    }
+  }
+}

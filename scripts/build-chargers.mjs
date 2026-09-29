@@ -4,7 +4,8 @@
 //   node scripts/build-chargers.mjs --cached   -> rebuilds from scripts/.cache/chargers.json
 //
 // Sites mapped as several points (one per charger post) are merged. Prices are not in OSM: they come from the
-// operators' published tariffs at runtime (src/data/evTariffs.js), matched by network and charger power.
+// operators' published tariffs at runtime (src/data/evTariffs.json, read by the app's src/data/evTariffs.js),
+// matched by network and charger power.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
