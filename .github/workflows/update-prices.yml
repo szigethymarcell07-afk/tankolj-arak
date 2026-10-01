@@ -1,13 +1,21 @@
 name: Árfrissítés
 
-# Every 3 hours: download the prices, commit them when they changed, publish _site/prices.json on GitHub Pages.
-# Once a day (and on a manual run) also the EV charging sites from OpenStreetMap -> _site/chargers.json.
+# Download the prices, commit them when they changed, publish _site/prices.json on GitHub Pages.
+# Every hour: started by the app's report server (a Cloudflare Worker cron, tankolj-reports, which calls
+# workflow_dispatch with kind=prices), because GitHub's own schedule is unreliable: on 2026-09-30 and 10-01 it ran
+# 3-4 times a day instead of 8, with gaps of up to 9 hours. The schedule below stays as a fallback.
+# Once a day (and on a manual run from the Actions tab) also the EV charging sites from OpenStreetMap -> _site/chargers.json.
 # A push to main (e.g. a new stations.json or hand-edited evTariffs.json, published inside prices.json) also republishes.
 on:
   schedule:
-    - cron: '17 */3 * * *' # prices; UTC, off the full hour (scheduled runs can start a few minutes late)
+    - cron: '17 */3 * * *' # prices, fallback; UTC, off the full hour (scheduled runs can start late or be dropped)
     - cron: '40 2 * * *' # chargers, once a day at night (the Overpass API is a shared free service)
   workflow_dispatch:
+    inputs:
+      kind:
+        description: 'all = prices and chargers, prices = prices only (the hourly run)'
+        type: string
+        default: all
   push:
     branches: [main]
 
@@ -33,10 +41,11 @@ jobs:
         with:
           node-version: 24
 
-      # EV charging sites: daily run or manual run only. Overpass is often overloaded; a failure here (or a stale or
-      # much shorter list, rejected by the script) keeps the previous chargers.json and does not stop the prices.
+      # EV charging sites: daily run or manual run only (not the hourly kind=prices one). Overpass is often overloaded;
+      # a failure here (or a stale or much shorter list, rejected by the script) keeps the previous chargers.json and
+      # does not stop the prices.
       - name: Töltők (OpenStreetMap)
-        if: github.event.schedule == '40 2 * * *' || github.event_name == 'workflow_dispatch'
+        if: github.event.schedule == '40 2 * * *' || (github.event_name == 'workflow_dispatch' && inputs.kind != 'prices')
         continue-on-error: true
         run: node scripts/build-chargers.mjs
 

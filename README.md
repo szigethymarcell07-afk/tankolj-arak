@@ -1,7 +1,9 @@
 # tankolj-arak
 
-A **TankoljOkosan** iOS-app árai, töltői és töltési díjai. A GitHub Actions 3 óránként letölti a friss árakat,
-naponta egyszer a töltőket, és a GitHub Pages-en közzéteszi őket. A töltési díjakat itt kézzel kell frissíteni. Az
+A **TankoljOkosan** iOS-app árai, töltői és töltési díjai. A GitHub Actions óránként letölti a friss árakat,
+naponta egyszer a töltőket, és a GitHub Pages-en közzéteszi őket. Az óránkénti futást az app árbejelentő szervere
+(Cloudflare Worker) indítja `workflow_dispatch`-csel (`kind: prices`, töltők nélkül), mert a GitHub saját időzítése
+megbízhatatlan (napi 3–4 futás 8 helyett); a 3 óránkénti GitHub-időzítés tartaléknak maradt. A töltési díjakat itt kézzel kell frissíteni. Az
 app induláskor és előtérbe hozáskor innen tölti le az adatokat, így a frissítésükhöz nem kell App Store-frissítés.
 
 Közzétett fájlok:
@@ -12,7 +14,7 @@ Közzétett fájlok:
 
 ## Mi történik egy futáskor (`.github/workflows/update-prices.yml`)
 
-0. Csak a napi (02:40 UTC) és a kézi futásnál: `scripts/build-chargers.mjs` letölti a nyilvános töltőket az
+0. Csak a napi (02:40 UTC) és a kézi futásnál (az Actions fülről; a `kind: prices` indítás kihagyja): `scripts/build-chargers.mjs` letölti a nyilvános töltőket az
    OpenStreetMap-ből (Overpass) → `src/data/chargers.json`. A városnevekhez a `scripts/.cache/places.json`
    kell. A 7 napnál régebbi adatot és a 20%-nál nagyobb visszaesést elutasítja. Ha nem sikerül, a régi lista
    marad, és a futás folytatódik.
