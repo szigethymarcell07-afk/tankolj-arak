@@ -6,7 +6,12 @@
 // Source: benzinkutarak.hu (daily updated per-station prices; robots.txt allows everything). One request per
 // fuel type covers the whole country, sent one by one with a pause. The price rows are matched to the
 // OpenStreetMap stations in src/data/stations.json; priced stations missing from OpenStreetMap are kept as extras.
-// The file is only rewritten when a price changed or on a new day, so a running dev server reloads rarely.
+// The file is only rewritten when a price changed or on a new day, so a running dev server reloads rarely; the time of
+// every successful check is in CHECK_FILE (the data repo's build-site.mjs publishes it as stationPrices.checkedAt).
+//
+// `since` records when each price was first seen at its current value: { [station id]: { [fuel]: unix hour } }
+// (hours since 1970, UTC), carried over from the previous file while the price stays the same. `trackedFrom` is the
+// hour the record starts; a price without an entry has not changed since then (at least).
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -179,6 +184,26 @@ function match(sites, stations) {
   return { byStation, brands, extra };
 }
 
+// When each price was first seen at its current value (see the top of the file). A price seen for the first time gets
+// this hour; one that had no record yet (the first run with `since`), the start of the record.
+export function sinceOf(previous, byStation, extra, hour) {
+  const trackedFrom = previous?.trackedFrom ?? hour;
+  const before = { ...(previous?.stations || {}) };
+  for (const e of previous?.extra || []) before[e.id] = e.prices;
+  const since = {};
+  const record = (id, prices) => {
+    for (const [fuel, price] of Object.entries(prices)) {
+      const old = before[id]?.[fuel];
+      const known = previous?.since?.[id]?.[fuel];
+      const at = old !== price ? (old == null && !previous?.trackedFrom ? trackedFrom : hour) : known ?? trackedFrom;
+      if (at !== trackedFrom) (since[id] ||= {})[fuel] = at;
+    }
+  };
+  for (const [id, prices] of Object.entries(byStation)) record(id, prices);
+  for (const e of extra) record(e.id, e.prices);
+  return { since, trackedFrom };
+}
+
 async function readJson(file) {
   try {
     return JSON.parse(await fs.readFile(file, 'utf8'));
@@ -208,8 +233,9 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
 
   const previous = await readJson(OUT_FILE);
   const now = new Date();
+  const { since, trackedFrom } = sinceOf(previous, byStation, extra, Math.floor(now.getTime() / 3600e3));
   const sameDay = previous && new Date(previous.checkedAt).toDateString() === now.toDateString();
-  const unchanged = previous && JSON.stringify([previous.stations, previous.brands, previous.extra]) === JSON.stringify([byStation, brands, extra]);
+  const unchanged = previous && JSON.stringify([previous.stations, previous.brands, previous.extra, previous.since]) === JSON.stringify([byStation, brands, extra, since]);
   if (sameDay && unchanged) {
     log(`Kútárak ellenőrizve: nem változtak (${sites.length} kút).`);
     return false;
@@ -225,7 +251,9 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
     averages,
     stations: byStation,
     brands,
-    extra
+    extra,
+    trackedFrom,
+    since
   };
   await fs.writeFile(OUT_FILE, `${JSON.stringify(out)}\n`);
   log(`Kútárak frissítve: ${sites.length} kút (${out.matched} párosítva az OSM-kutakhoz, ${extra.length} új) · átlag 95: ${averages.benzin95} Ft, dízel: ${averages.diesel} Ft`);

@@ -3,7 +3,9 @@
 //   node scripts/build-site.mjs
 //
 // _site/prices.json = { version, publishedAt, stationsGeneratedAt, stationPrices, priceReference, chargers, evTariffs }
-//   stationPrices       per-station pump prices (src/data/stationPrices.json, scripts/update-station-prices.mjs)
+//   stationPrices       per-station pump prices (src/data/stationPrices.json, scripts/update-station-prices.mjs), with
+//                       `checkedAt` set to this run's successful check of the source (the file itself is only rewritten
+//                       when a price changes, so its own checkedAt can be hours old)
 //   priceReference      official national averages, fallback (src/data/priceReference.json, scripts/update-prices.mjs)
 //   stationsGeneratedAt the station list the prices were matched to; the app compares it with its own
 //   publishedAt         when this workflow run finished (the price files only change when a price changes)
@@ -30,6 +32,10 @@ const [stationPrices, priceReference, stations, chargers] = await Promise.all([
 ]);
 if (!Array.isArray(chargers?.chargers) || !chargers.meta?.generatedAt) throw new Error('Charger file is incomplete');
 if (!stationPrices?.stations || !priceReference?.averages) throw new Error('Price files are incomplete');
+
+// The time of the last successful check of the source, written by update-station-prices.mjs on every run
+const checkedMs = Number(await fs.readFile(path.join(ROOT, 'node_modules', '.cache', 'station-prices-checked'), 'utf8').catch(() => 0));
+if (checkedMs > Date.parse(stationPrices.checkedAt)) stationPrices.checkedAt = new Date(checkedMs).toISOString();
 
 // The same rules as validEvTariffs in the app (src/data/evTariffs.js): a file the app would reject is not published
 const PRICE_KEYS = ['adhoc', 'app', 'member', 'night'];
