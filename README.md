@@ -29,7 +29,8 @@ Közzétett fájlok:
    `_site/chargers.json`-t, és a Pages közzéteszi őket.
 
 A workflow kézzel is indítható (Actions → Árfrissítés → Run workflow), és minden `main`-re történő push is
-újra közzéteszi az adatokat.
+újra közzéteszi az adatokat. Push után a kútárak letöltése `--soft` módban fut: ha a forrás épp nem válaszol, a
+futás nem bukik el, a korábbi árak maradnak, és a következő óránkénti futás pótolja.
 
 ## Töltési díjak frissítése (`src/data/evTariffs.json`)
 
