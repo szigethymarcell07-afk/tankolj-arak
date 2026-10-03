@@ -149,7 +149,11 @@ async function download() {
   return [...sites.values()].filter(s => Object.keys(s.prices).length);
 }
 
-const THIRD_PASS_M = 5000; // a site with sound coordinates is moved to a station of its street this far at most
+// A site with sound coordinates is moved to a station of its street this far at most (2026-10-03: the source put the
+// two MOLs of Szatymaz, M5 4–5 km from where they are)
+const THIRD_PASS_M = 8000;
+// Words telling the two sides of a road apart ("M5 autópálya 151 km jobb oldal")
+const SIDES = ['bal', 'jobb', 'eszak', 'del', 'kelet', 'nyugat'];
 
 // Pair every priced site with the nearest OpenStreetMap station: same network within 300 m, any within 120 m
 function match(sites, stations, places = []) {
@@ -214,25 +218,33 @@ function match(sites, stations, places = []) {
 
   // Third pass: a site still unmatched goes to the station of its settlement with the same street and network (the
   // street of the station's address among the words of the site's), when that station is the only one there of the
-  // network, matched or not (two MOLs of "M5 autópálya", one each side, would cross) and still free: within
-  // THIRD_PASS_M, or anywhere in the settlement when the site's coordinates are broken. `moved`: station id -> the extra's id it had.
+  // network, matched or not, and still free: within THIRD_PASS_M, or anywhere in the settlement when the site's
+  // coordinates are broken. Of several (the two MOLs of "M5 autópálya", one each side), the one of the same side.
+  // Both ways unique: not when two sites fit one station (Siófok, M7: both sides in the source, one in OSM). `moved`: station id -> the extra's id it had.
   const placeOf = settlements(places);
   const moved = {};
   const problems = new Map(); // site index -> why its coordinates cannot be right
+  const third = []; // { i, st }: the one station each site fits
   sites.forEach((site, i) => {
     if (usedSite.has(i)) return;
     const problem = coordsProblem(site, placeOf(site.city));
     if (problem) problems.set(i, problem);
     const brand = BRANDS[site.network] || 'Független';
     const words = new Set(streetWords(site.address));
-    const fits = stations.filter(st =>
+    let fits = stations.filter(st =>
       st.brand === brand && plain(site.city) && plain(st.city) === plain(site.city) &&
       words.has(streetKey(String(st.address || '').split(',').slice(1).join(',')))
     );
+    const side = SIDES.find(w => words.has(w));
+    if (fits.length > 1 && side) fits = fits.filter(st => streetWords(st.address).includes(side));
     if (fits.length !== 1 || byStation[fits[0].id] || (!problem && distanceM(site, fits[0]) > THIRD_PASS_M)) return;
-    take(i, fits[0]);
-    moved[fits[0].id] = `bk-${site.lat.toFixed(5)}-${site.lng.toFixed(5)}`;
+    third.push({ i, st: fits[0] });
   });
+  for (const { i, st } of third) {
+    if (third.filter(t => t.st === st).length > 1) continue;
+    take(i, st);
+    moved[st.id] = `bk-${sites[i].lat.toFixed(5)}-${sites[i].lng.toFixed(5)}`;
+  }
 
   // Unmatched sites become extras, unless their coordinates cannot be right (not shown: it would mislead)
   const dropped = [];
