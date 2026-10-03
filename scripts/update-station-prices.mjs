@@ -46,6 +46,24 @@ const BRANDS = {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+// The source sometimes does not answer for a moment (2026-10-02 15:06 UTC: a connect timeout from GitHub's runner,
+// the next hourly run was fine). A network error or a server error is tried again twice before the run fails;
+// not with --soft (a local build or dev start should not wait).
+export const RETRY_WAITS_MS = [20000, 60000];
+const transient = (err) =>
+  err?.name === 'TimeoutError' || err?.name === 'AbortError' || /fetch failed|HTTP 5\d\d/.test(String(err?.message));
+export async function withRetries(task, { waits = RETRY_WAITS_MS, log = console.log } = {}) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await task();
+    } catch (err) {
+      if (!transient(err) || attempt >= waits.length) throw err;
+      log(`A forrás nem válaszolt (${err.cause?.code || err.message}); újrapróbálás ${waits[attempt] / 1000} s múlva.`);
+      await sleep(waits[attempt]);
+    }
+  }
+}
+
 function distanceM(a, b) {
   const rad = Math.PI / 180;
   const dLat = (b.lat - a.lat) * rad;
@@ -218,7 +236,7 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
     if (Date.now() - checked < FRESH_HOURS * 3600000 && (await readJson(OUT_FILE))) return false;
   }
 
-  const [sites, stationsFile] = await Promise.all([download(), readJson(STATIONS_FILE)]);
+  const [sites, stationsFile] = await Promise.all([soft ? download() : withRetries(download, { log }), readJson(STATIONS_FILE)]);
   if (sites.length < 500) throw new Error(`Only ${sites.length} priced stations, keeping the previous prices`);
   const { byStation, brands, extra } = match(sites, stationsFile.stations);
 
