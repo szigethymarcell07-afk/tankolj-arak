@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OUT_FILE = path.join(ROOT, 'src', 'data', 'stationPrices.json');
 const STATIONS_FILE = path.join(ROOT, 'src', 'data', 'stations.json');
+const PLACES_FILE = path.join(ROOT, 'scripts', '.cache', 'places.json'); // settlements (build-stations.mjs)
 const CHECK_FILE = path.join(ROOT, 'node_modules', '.cache', 'station-prices-checked');
 const SITE = 'https://www.benzinkutarak.hu';
 const ENDPOINT = `${SITE}/kozel.php`;
@@ -44,7 +45,9 @@ const FUELS = {
 const BRANDS = {
   Mol: 'MOL', MolPartner: 'MOL', Shell: 'Shell', OMV: 'OMV', Orlen: 'Orlen', AVIA: 'Avia', Auchan: 'Auchan',
   OIL: 'OIL!', MPetrol: 'Mobil Petrol', ALDI: 'Aldi', Envi: 'ENVI', TeleTank: 'Teletank', Dallas: 'Dallas',
-  OrangesOil: 'Oranges Oil', EDO: 'EDO', HunPetrol: 'HunPetrol', Maxiline: 'MAXILine', FullEnergy: 'FullEnergy'
+  OrangesOil: 'Oranges Oil', EDO: 'EDO', HunPetrol: 'HunPetrol', Maxiline: 'MAXILine', FullEnergy: 'FullEnergy',
+  // M.Petrol stations listed under a network of their own (2026-10-03: 6 sites, M.Petrol's prices, its stations in OSM)
+  Mobiliti: 'Mobil Petrol'
 };
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -94,14 +97,33 @@ async function fetchFuel(fuelId, networks) {
   return JSON.parse(m[1]) || [];
 }
 
-// "XI, Budafoki út 211" / "1117 Budapest, Budafoki út 211" -> "budafoki"
-function streetKey(address) {
-  const words = String(address || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const plain = (text) => String(text || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+
+// "XI, Budafoki út 211" / "1117 Budapest, Budafoki út 211" -> ["budafoki"]; streetKey: the first one
+function streetWords(address) {
+  return plain(address)
     .replace(/^[ivxlc]+\s*,\s*/, '')
-    .split(/[\s,.]+/)
+    .split(/[\s,.()]+/)
     .filter(w => w.length > 2 && !/^\d/.test(w) && !/^(ut|utca|u|ter|korut|hrsz|sz)$/.test(w));
-  return words[0] || '';
+}
+const streetKey = (address) => streetWords(address)[0] || '';
+
+// Where a priced site may be: inside Hungary, and near its settlement. The source's coordinates are sometimes broken
+// (2026-10-03: one of them a round 44.5, 45.5 or 19.5, 150–260 km off, which put three MOL stations in Serbia or in
+// the wrong county). places: [{ name, lat, lng, city }] (build-stations.mjs's settlements), may be empty.
+const HUNGARY = { south: 45.7, north: 48.6, west: 16.1, east: 22.95 };
+const PLACE_REACH_M = 15000; // from a town's or village's point (outlying parts included)
+const CITY_REACH_M = 25000; // from a city's (Budapest: 25 km reaches its edges)
+function settlements(places) {
+  const byName = new Map(places.map(p => [plain(p.name), p]));
+  return (city) => byName.get(plain(city)) || null;
+}
+function coordsProblem(site, place) {
+  const { lat, lng } = site;
+  if (!(lat >= HUNGARY.south && lat <= HUNGARY.north && lng >= HUNGARY.west && lng <= HUNGARY.east)) return 'Magyarországon kívül';
+  const d = place ? distanceM(site, place) : 0;
+  if (d > (place?.city ? CITY_REACH_M : PLACE_REACH_M)) return `${Math.round(d / 1000)} km-re a településétől`;
+  return null;
 }
 
 const median = (values) => {
@@ -127,8 +149,10 @@ async function download() {
   return [...sites.values()].filter(s => Object.keys(s.prices).length);
 }
 
+const THIRD_PASS_M = 5000; // a site with sound coordinates is moved to a station of its street this far at most
+
 // Pair every priced site with the nearest OpenStreetMap station: same network within 300 m, any within 120 m
-function match(sites, stations) {
+function match(sites, stations, places = []) {
   const cell = (lat, lng) => `${Math.floor(lat / 0.01)},${Math.floor(lng / 0.015)}`;
   const grid = new Map();
   for (const st of stations) {
@@ -187,9 +211,35 @@ function match(sites, stations) {
   for (const { i, st } of late) {
     if (!usedSite.has(i) && !byStation[st.id]) take(i, st);
   }
+
+  // Third pass: a site still unmatched goes to the station of its settlement with the same street and network (the
+  // street of the station's address among the words of the site's), when that station is the only one there of the
+  // network, matched or not (two MOLs of "M5 autópálya", one each side, would cross) and still free: within
+  // THIRD_PASS_M, or anywhere in the settlement when the site's coordinates are broken. `moved`: station id -> the extra's id it had.
+  const placeOf = settlements(places);
+  const moved = {};
+  const problems = new Map(); // site index -> why its coordinates cannot be right
+  sites.forEach((site, i) => {
+    if (usedSite.has(i)) return;
+    const problem = coordsProblem(site, placeOf(site.city));
+    if (problem) problems.set(i, problem);
+    const brand = BRANDS[site.network] || 'Független';
+    const words = new Set(streetWords(site.address));
+    const fits = stations.filter(st =>
+      st.brand === brand && plain(site.city) && plain(st.city) === plain(site.city) &&
+      words.has(streetKey(String(st.address || '').split(',').slice(1).join(',')))
+    );
+    if (fits.length !== 1 || byStation[fits[0].id] || (!problem && distanceM(site, fits[0]) > THIRD_PASS_M)) return;
+    take(i, fits[0]);
+    moved[fits[0].id] = `bk-${site.lat.toFixed(5)}-${site.lng.toFixed(5)}`;
+  });
+
+  // Unmatched sites become extras, unless their coordinates cannot be right (not shown: it would mislead)
+  const dropped = [];
   const extra = sites
     .map((site, i) => ({ site, i }))
     .filter(({ i }) => !usedSite.has(i))
+    .filter(({ site, i }) => !(problems.has(i) && dropped.push(`${site.network} – ${site.city}, ${site.address} (${problems.get(i)})`)))
     .map(({ site }) => {
       const brand = BRANDS[site.network] || 'Független';
       const city = String(site.city || '').trim();
@@ -206,7 +256,7 @@ function match(sites, stations) {
         prices: site.prices
       };
     });
-  return { byStation, brands, extra, siteOf };
+  return { byStation, brands, extra, siteOf, moved, dropped };
 }
 
 // A daily price far from what similar stations ask today is more likely a source error (an old or mistyped price, seen
@@ -269,15 +319,17 @@ export function suspectPrices(entries) {
 
 // When each price was first seen at its current value (see the top of the file). A price seen for the first time gets
 // this hour; one that had no record yet (the first run with `since`), the start of the record.
-export function sinceOf(previous, byStation, extra, hour) {
+// moved: station id -> an earlier id of its prices (an extra matched to that station since), whose record carries over
+export function sinceOf(previous, byStation, extra, hour, moved = {}) {
   const trackedFrom = previous?.trackedFrom ?? hour;
   const before = { ...(previous?.stations || {}) };
   for (const e of previous?.extra || []) before[e.id] = e.prices;
   const since = {};
   const record = (id, prices) => {
     for (const [fuel, price] of Object.entries(prices)) {
-      const old = before[id]?.[fuel];
-      const known = previous?.since?.[id]?.[fuel];
+      const was = before[id] ? id : moved[id];
+      const old = before[was]?.[fuel];
+      const known = previous?.since?.[was]?.[fuel];
       const at = old !== price ? (old == null && !previous?.trackedFrom ? trackedFrom : hour) : known ?? trackedFrom;
       if (at !== trackedFrom) (since[id] ||= {})[fuel] = at;
     }
@@ -301,9 +353,16 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
     if (Date.now() - checked < FRESH_HOURS * 3600000 && (await readJson(OUT_FILE))) return false;
   }
 
-  const [sites, stationsFile] = await Promise.all([soft ? download() : withRetries(download, { log }), readJson(STATIONS_FILE)]);
+  const [sites, stationsFile, placesFile] = await Promise.all([
+    soft ? download() : withRetries(download, { log }),
+    readJson(STATIONS_FILE),
+    readJson(PLACES_FILE)
+  ]);
   if (sites.length < 500) throw new Error(`Only ${sites.length} priced stations, keeping the previous prices`);
-  const { byStation, brands, extra, siteOf } = match(sites, stationsFile.stations);
+  const places = (placesFile?.elements || []).map(p => ({ name: p.tags?.name, lat: p.lat, lng: p.lon, city: p.tags?.place === 'city' }));
+  if (!places.length) log('Települések nélkül (scripts/.cache/places.json): az új kutak csak országhatárra ellenőrizve.');
+  const { byStation, brands, extra, siteOf, moved, dropped } = match(sites, stationsFile.stations, places);
+  for (const d of dropped) log(`Kihagyott új kút, hibás koordináta: ${d}`);
   const stationById = new Map(stationsFile.stations.map(st => [st.id, st]));
   const suspect = suspectPrices([
     ...Object.entries(byStation).map(([id, prices]) => {
@@ -324,7 +383,7 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
 
   const previous = await readJson(OUT_FILE);
   const now = new Date();
-  const { since, trackedFrom } = sinceOf(previous, byStation, extra, Math.floor(now.getTime() / 3600e3));
+  const { since, trackedFrom } = sinceOf(previous, byStation, extra, Math.floor(now.getTime() / 3600e3), moved);
   const sameDay = previous && new Date(previous.checkedAt).toDateString() === now.toDateString();
   const unchanged = previous && JSON.stringify([previous.stations, previous.brands, previous.extra, previous.since, previous.suspect]) === JSON.stringify([byStation, brands, extra, since, suspect]);
   if (sameDay && unchanged) {
