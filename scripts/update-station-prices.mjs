@@ -12,6 +12,9 @@
 // `since` records when each price was first seen at its current value: { [station id]: { [fuel]: unix hour } }
 // (hours since 1970, UTC), carried over from the previous file while the price stays the same. `trackedFrom` is the
 // hour the record starts; a price without an entry has not changed since then (at least).
+//
+// `suspect` marks the 95 and diesel prices far from what similar stations ask (suspectPrices): { [station id]:
+// { [fuel]: { ref, basis } } }. They are kept and shown, flagged, with a call to report the real price.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -152,9 +155,11 @@ function match(sites, stations) {
   const usedSite = new Set();
   const byStation = {};
   const brands = {};
+  const siteOf = {}; // station id -> the priced site, for suspectPrices
   const take = (i, st) => {
     usedSite.add(i);
     byStation[st.id] = sites[i].prices;
+    siteOf[st.id] = sites[i];
     // OpenStreetMap often lacks the brand of small or rebranded stations
     const brand = BRANDS[sites[i].network];
     if (brand && st.brand === 'Független') brands[st.id] = brand;
@@ -188,8 +193,10 @@ function match(sites, stations) {
     .map(({ site }) => {
       const brand = BRANDS[site.network] || 'Független';
       const city = String(site.city || '').trim();
+      const id = `bk-${site.lat.toFixed(5)}-${site.lng.toFixed(5)}`;
+      siteOf[id] = site;
       return {
-        id: `bk-${site.lat.toFixed(5)}-${site.lng.toFixed(5)}`,
+        id,
         name: `${brand === 'Független' ? site.network : brand} – ${city}`,
         brand,
         city,
@@ -199,7 +206,65 @@ function match(sites, stations) {
         prices: site.prices
       };
     });
-  return { byStation, brands, extra };
+  return { byStation, brands, extra, siteOf };
+}
+
+// A daily price far from what similar stations ask today is more likely a source error (an old or mistyped price, seen
+// 2026-10-03: an Orlen in Budapest at 572 Ft diesel, the network at 707) than a real one, as networks price alike.
+// Similar stations: the same network (or, for an independent, the same source network) with at least SUSPECT_MIN
+// prices, else the country; motorway stations against the motorway ones (at least SUSPECT_MIN_MOTORWAY), which ask
+// 20–60 Ft more and spread more, so a wider margin; one at a city price (an exit station) is fine too. Only 95 and
+// diesel: the premium grades and LPG differ much between stations of a network even when correct.
+// entries: [{ id, brand, network: source network, text: names and addresses, prices }]
+export const SUSPECT_FUELS = ['benzin95', 'diesel'];
+export const SUSPECT_FT = 25;
+export const SUSPECT_FT_MOTORWAY = 40;
+const SUSPECT_MIN = 5;
+const SUSPECT_MIN_MOTORWAY = 3;
+const MOTORWAY = /\bM\s?\d{1,2}\b|aut[oó]p[aá]ly|pihen[oő]/i; // "M7", "M0 19 kijárat", "autópálya", "Kajáspihenő"
+const middle = (v) => {
+  const s = [...v].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+};
+export function suspectPrices(entries) {
+  const rows = entries.map(e => ({
+    ...e,
+    motorway: MOTORWAY.test(e.text),
+    group: e.brand !== 'Független' ? e.brand : `source:${e.network}`
+  }));
+  const suspect = {};
+  for (const fuel of SUSPECT_FUELS) {
+    const city = {};
+    const motorway = {};
+    for (const r of rows) {
+      const p = r.prices[fuel];
+      if (!p) continue;
+      const by = r.motorway ? motorway : city;
+      (by[r.group] ||= []).push(p);
+      (by[''] ||= []).push(p); // the country
+    }
+    const typical = (by, min) => Object.fromEntries(Object.entries(by).filter(([, v]) => v.length >= min).map(([g, v]) => [g, middle(v)]));
+    const cityTypical = typical(city, SUSPECT_MIN);
+    const motorwayTypical = typical(motorway, SUSPECT_MIN_MOTORWAY);
+    for (const r of rows) {
+      const p = r.prices[fuel];
+      if (!p) continue;
+      const own = cityTypical[r.group] != null;
+      const cityRef = cityTypical[r.group] ?? cityTypical[''];
+      if (cityRef == null || Math.abs(p - cityRef) <= SUSPECT_FT) continue;
+      let ref = cityRef;
+      let basis = own ? (r.brand === 'Független' ? 'similar' : 'network') : 'country';
+      if (r.motorway) {
+        const ownMotorway = motorwayTypical[r.group] != null;
+        ref = motorwayTypical[r.group] ?? motorwayTypical[''];
+        if (ref == null || Math.abs(p - ref) <= SUSPECT_FT_MOTORWAY) continue;
+        basis = ownMotorway && r.brand !== 'Független' ? 'motorway' : 'countryMotorway';
+      }
+      (suspect[r.id] ||= {})[fuel] = { ref: Math.round(ref), basis };
+    }
+  }
+  return suspect;
 }
 
 // When each price was first seen at its current value (see the top of the file). A price seen for the first time gets
@@ -238,7 +303,15 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
 
   const [sites, stationsFile] = await Promise.all([soft ? download() : withRetries(download, { log }), readJson(STATIONS_FILE)]);
   if (sites.length < 500) throw new Error(`Only ${sites.length} priced stations, keeping the previous prices`);
-  const { byStation, brands, extra } = match(sites, stationsFile.stations);
+  const { byStation, brands, extra, siteOf } = match(sites, stationsFile.stations);
+  const stationById = new Map(stationsFile.stations.map(st => [st.id, st]));
+  const suspect = suspectPrices([
+    ...Object.entries(byStation).map(([id, prices]) => {
+      const st = stationById.get(id);
+      return { id, brand: brands[id] || st.brand, network: siteOf[id].network, text: `${st.name} ${st.address} ${siteOf[id].address}`, prices };
+    }),
+    ...extra.map(e => ({ id: e.id, brand: e.brand, network: siteOf[e.id].network, text: `${e.name} ${e.address}`, prices: e.prices }))
+  ]);
 
   const averages = {};
   for (const key of Object.values(FUELS)) {
@@ -253,7 +326,7 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
   const now = new Date();
   const { since, trackedFrom } = sinceOf(previous, byStation, extra, Math.floor(now.getTime() / 3600e3));
   const sameDay = previous && new Date(previous.checkedAt).toDateString() === now.toDateString();
-  const unchanged = previous && JSON.stringify([previous.stations, previous.brands, previous.extra, previous.since]) === JSON.stringify([byStation, brands, extra, since]);
+  const unchanged = previous && JSON.stringify([previous.stations, previous.brands, previous.extra, previous.since, previous.suspect]) === JSON.stringify([byStation, brands, extra, since, suspect]);
   if (sameDay && unchanged) {
     log(`Kútárak ellenőrizve: nem változtak (${sites.length} kút).`);
     return false;
@@ -271,10 +344,11 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
     brands,
     extra,
     trackedFrom,
-    since
+    since,
+    suspect
   };
   await fs.writeFile(OUT_FILE, `${JSON.stringify(out)}\n`);
-  log(`Kútárak frissítve: ${sites.length} kút (${out.matched} párosítva az OSM-kutakhoz, ${extra.length} új) · átlag 95: ${averages.benzin95} Ft, dízel: ${averages.diesel} Ft`);
+  log(`Kútárak frissítve: ${sites.length} kút (${out.matched} párosítva az OSM-kutakhoz, ${extra.length} új) · átlag 95: ${averages.benzin95} Ft, dízel: ${averages.diesel} Ft · gyanús forrásár: ${Object.keys(suspect).length} kút`);
   return true;
 }
 
