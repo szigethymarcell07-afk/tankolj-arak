@@ -2,6 +2,8 @@
 //
 //   node scripts/update-station-prices.mjs          -> always downloads
 //   node scripts/update-station-prices.mjs --soft   -> skips when checked in the last FRESH_HOURS, never fails
+//   node scripts/update-station-prices.mjs --grace  -> the data repo's hourly runs: a source outage only warns while
+//                                                      the last successful check is recent (GRACE_HOURS)
 //
 // Source: benzinkutarak.hu (daily updated per-station prices; robots.txt allows everything). One request per
 // fuel type covers the whole country, sent one by one with a pause. The price rows are matched to the
@@ -29,6 +31,7 @@ const SITE = 'https://www.benzinkutarak.hu';
 const ENDPOINT = `${SITE}/kozel.php`;
 const HEADERS = { 'User-Agent': 'TankoljOkosan/1.0 (hobby project; daily price refresh)', Referer: ENDPOINT };
 const SOFT = process.argv.includes('--soft');
+const GRACE = process.argv.includes('--grace');
 export const FRESH_HOURS = 3;
 
 // Site fuel id -> app fuel key
@@ -52,11 +55,12 @@ const BRANDS = {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-// The source sometimes does not answer for a moment (2026-10-02 15:06 UTC: a connect timeout from GitHub's runner,
-// the next hourly run was fine). A network error or a server error is tried again twice before the run fails;
-// not with --soft (a local build or dev start should not wait).
-export const RETRY_WAITS_MS = [20000, 60000];
-const transient = (err) =>
+// The source sometimes does not answer for a few minutes (connect timeouts from GitHub's runners: 2026-10-02 15:06,
+// 10-03 13:08 and 10-04 03:05 UTC, 3 of 67 runs; the next hourly run was fine each time). A network error or a
+// server error is tried again three times (after 20 s, 1 and 3 minutes) before the run fails; not with --soft (a
+// local build or dev start should not wait).
+export const RETRY_WAITS_MS = [20000, 60000, 180000];
+export const transient = (err) =>
   err?.name === 'TimeoutError' || err?.name === 'AbortError' || /fetch failed|HTTP 5\d\d/.test(String(err?.message));
 export async function withRetries(task, { waits = RETRY_WAITS_MS, log = console.log } = {}) {
   for (let attempt = 0; ; attempt++) {
@@ -423,13 +427,52 @@ export async function updateStationPrices({ soft = false, log = console.log } = 
   return true;
 }
 
+// --grace (the data repo's hourly runs): when the source still does not answer after the retries, the run only
+// warns (a GitHub annotation, no failure mail) while the last successful check is under GRACE_HOURS old; the
+// previous prices stay. An older one, an unknown one, or an error that is not about reaching the source (the page's
+// layout changed…) fails the run, so a lasting outage is not missed.
+export const GRACE_HOURS = 6;
+const PUBLISHED_URL = 'https://szigethymarcell07-afk.github.io/tankolj-arak/prices.json';
+
+// The last successful check (ms): the published prices.json's (build-site.mjs puts every successful check's time
+// there), else this file's own `checkedAt` (the time it was written, so no later than the last check)
+export async function lastCheckMs({ url = PUBLISHED_URL } = {}) {
+  try {
+    const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15000) });
+    const at = Date.parse((await res.json())?.stationPrices?.checkedAt);
+    if (res.ok && Number.isFinite(at)) return at;
+  } catch {
+    // below
+  }
+  return Date.parse((await readJson(OUT_FILE))?.checkedAt);
+}
+
+// Whether a failed run may pass with a warning: { pass, hours } (hours since the last successful check, or NaN)
+export function graceFor(err, lastMs, now = Date.now()) {
+  const hours = (now - lastMs) / 3600e3;
+  return { pass: transient(err) && hours >= 0 && hours < GRACE_HOURS, hours };
+}
+
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  updateStationPrices({ soft: SOFT }).catch(err => {
+  updateStationPrices({ soft: SOFT }).catch(async err => {
     if (SOFT) {
       console.warn(`Kútár-frissítés kihagyva (${err.message}); a korábbi árak maradnak.`);
-    } else {
-      console.error(err);
-      process.exit(1);
+      return;
     }
+    if (GRACE && transient(err)) {
+      const last = await lastCheckMs();
+      const { pass, hours } = graceFor(err, last);
+      const when = Number.isFinite(hours) ? `${hours.toFixed(1)} órája` : 'ismeretlen ideje';
+      if (pass) {
+        // The time of the last successful check is published again (build-site.mjs), not this file's older one
+        await fs.mkdir(path.dirname(CHECK_FILE), { recursive: true });
+        await fs.writeFile(CHECK_FILE, String(last));
+        console.log(`::warning title=Kútárak::A forrás most nem érhető el (${err.cause?.code || err.message}); a legutóbbi sikeres ellenőrzés ${when} volt, a korábbi árak maradnak.`);
+        return;
+      }
+      console.error(`A forrás ${GRACE_HOURS} óránál régebben nem érhető el (legutóbbi sikeres ellenőrzés: ${when}).`);
+    }
+    console.error(err);
+    process.exit(1);
   });
 }

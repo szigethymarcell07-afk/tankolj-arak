@@ -53,12 +53,14 @@ jobs:
       - name: Országos átlagár
         run: node scripts/update-prices.mjs --soft
 
-      # Per-station prices: fails when the source is unreachable (the run shows the error; the steps below still save
-      # and publish the rest, with the previous prices). Not on a push: that run republishes a code or data change, and
-      # the next hourly run comes anyway, so a source outage only warns (--soft; 2026-10-03 13:08 UTC the source did
-      # not answer a push run two minutes after an hourly one, and a failure mail went out for nothing).
+      # Per-station prices. The source does not answer GitHub's runners for a few minutes now and then (3 of 67 runs,
+      # 2026-10-02..04; the next hour was fine), so after three retries (up to ~5 minutes) a run only warns while the
+      # last successful check is under 6 hours old (--grace: a GitHub annotation, no failure mail, the previous prices
+      # stay); after that, or on any other error (the page's layout changed…), it fails and the mail goes out. The
+      # steps below still save and publish the rest. On a push (a code or data change republished) a source outage
+      # never fails the run (--soft): the next hourly run comes anyway.
       - name: Kútárak
-        run: node scripts/update-station-prices.mjs ${{ github.event_name == 'push' && '--soft' || '' }}
+        run: node scripts/update-station-prices.mjs ${{ github.event_name == 'push' && '--soft' || '--grace' }}
 
       # The price file is only rewritten when a price changed or a new day started. These commits also keep
       # the schedule alive: GitHub disables scheduled workflows after 60 days without repository activity.

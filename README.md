@@ -32,6 +32,11 @@ A workflow kézzel is indítható (Actions → Árfrissítés → Run workflow),
 újra közzéteszi az adatokat. Push után a kútárak letöltése `--soft` módban fut: ha a forrás épp nem válaszol, a
 futás nem bukik el, a korábbi árak maradnak, és a következő óránkénti futás pótolja.
 
+A többi futás (`--grace`) átmeneti kapcsolódási hibánál háromszor újrapróbál (20 s, 1 perc, 3 perc után). Ha a forrás
+utána sem válaszol, de a legutóbbi sikeres ellenőrzés 6 óránál frissebb, a futás csak figyelmeztet (sárga jelzés az
+Actions oldalon, e-mail nélkül), és a korábbi árak maradnak. Ha 6 óránál régebbi, vagy a hiba nem átmeneti
+(például megváltozott a forrás oldalának felépítése), a futás elbukik, és jön az értesítő.
+
 ## Töltési díjak frissítése (`src/data/evTariffs.json`)
 
 Ha egy töltőhálózat árat változtat, ebben a fájlban kell átírni, és pusholni. A push után pár percen belül
