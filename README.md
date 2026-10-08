@@ -25,6 +25,8 @@ Közzétett fájlok:
    hibát jelez, a régi árak maradnak, a többi lépés (mentés, közzététel) lefut.
 3. Ha változott valami, commitolja az ár- és töltőfájlokat. Ezek a commitok egyben életben tartják az ütemezést: a GitHub
    60 nap aktivitás nélkül kikapcsolja az ütemezett workflow-kat.
+3b. `scripts/update-history.mjs` (Ártörténet): a friss árakat hozzáírja az ártörténethez (`history/`, lent). Ha hibázik,
+   a történet marad, ahogy volt, az árak mentése és közzététele folytatódik.
 4. `scripts/build-site.mjs` összeállítja a `_site/prices.json`-t (benne a `src/data/evTariffs.json` díjaival) és a
    `_site/chargers.json`-t, és a Pages közzéteszi őket.
 
@@ -36,6 +38,19 @@ A többi futás (`--grace`) átmeneti kapcsolódási hibánál háromszor újrap
 utána sem válaszol, de a legutóbbi sikeres ellenőrzés 6 óránál frissebb, a futás csak figyelmeztet (sárga jelzés az
 Actions oldalon, e-mail nélkül), és a korábbi árak maradnak. Ha 6 óránál régebbi, vagy a hiba nem átmeneti
 (például megváltozott a forrás oldalának felépítése), a futás elbukik, és jön az értesítő.
+
+## Ártörténet (`history/`, 2026-10-08)
+
+Az app árdiagramjaihoz (országos átlag, kútonkénti árváltozás). A formátum a `scripts/price-history.mjs` elején van.
+- `history/national.json`: üzemanyagonként a napi országos átlag (budapesti naponként a nap utolsó ellenőrzésekor
+  érvényes napi kútárak átlaga, a gyanús forrásár és az „elavult?” ár nélkül; becsült és bejelentett ár itt eleve nincs).
+- `history/stations/00.json` … `31.json`: kútonként csak a változások (óra, ár egész forintban; negatív: gyanús
+  forrásár; 0: onnantól nincs napi ár). A kút fájlja: `shardOf(id)`, ugyanaz a függvény, mint az appban
+  (`src/data/priceHistory.js`); a kettőt együtt kell módosítani.
+- A `build-site.mjs` a `_site/history/`-ba másolja, és a `prices.json` `history` mezőjébe írja a leírását.
+- Az eleje (2026-09-28 15:44-től) a git-történetből jött, egyszer: `node scripts/backfill-history.mjs --ref origin/main`
+  (ez a 10-03 előtti, gyanús-jelölés nélküli változatokra az első jelölt változat jelöléseit viszi vissza, ha az ár
+  ugyanaz volt). Újrafuttatva elölről építi fel a mappát.
 
 ## Töltési díjak frissítése (`src/data/evTariffs.json`)
 

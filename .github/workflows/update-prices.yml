@@ -62,6 +62,13 @@ jobs:
       - name: Kútárak
         run: node scripts/update-station-prices.mjs ${{ github.event_name == 'push' && '--soft' || '--grace' }}
 
+      # The price history (history/): the national daily average and each station's price changes, from the prices
+      # just checked. A failure leaves the history as it was; the prices are still saved and published.
+      - name: Ártörténet
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        run: node scripts/update-history.mjs
+
       # The price file is only rewritten when a price changed or a new day started. These commits also keep
       # the schedule alive: GitHub disables scheduled workflows after 60 days without repository activity.
       - name: Változások mentése
@@ -69,7 +76,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
-          git add src/data/stationPrices.json src/data/priceReference.json src/data/chargers.json
+          git add src/data/stationPrices.json src/data/priceReference.json src/data/chargers.json history
           if git diff --cached --quiet; then
             echo "Nincs változás."
           else

@@ -13,10 +13,14 @@
 //                       that file (EV charging sites, scripts/build-chargers.mjs, daily) only when it is newer
 //   evTariffs           the EV charging tariffs, src/data/evTariffs.json as is (edited by hand). Left out when the
 //                       file has an error (the app keeps the tariffs it has); the run then fails so it gets noticed.
+//   history             { version, from, updatedAt, national, stations, shards } of the price history (history/,
+//                       scripts/price-history.mjs), published as _site/history/: the app downloads the national file
+//                       for its chart and a station's shard for its detail sheet. Left out when there is none.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SHARDS } from './price-history.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DATA = path.join(ROOT, 'src', 'data');
@@ -71,6 +75,17 @@ try {
 }
 if (tariffProblems.length) console.error(`src/data/evTariffs.json is not published:\n  ${tariffProblems.join('\n  ')}`);
 
+// The price history as it is (scripts/update-history.mjs keeps it); none yet, or unreadable: not published
+let history = null;
+try {
+  const national = JSON.parse(await fs.readFile(path.join(ROOT, 'history', 'national.json'), 'utf8'));
+  if (national?.version === 1 && Array.isArray(national.days)) {
+    history = { version: 1, from: national.from, updatedAt: national.updatedAt, national: 'history/national.json', stations: 'history/stations/{shard}.json', shards: SHARDS };
+  }
+} catch (err) {
+  if (err.code !== 'ENOENT') console.error(`history/ is not published: ${err.message}`);
+}
+
 const prices = {
   version: 1,
   publishedAt: new Date().toISOString(),
@@ -84,13 +99,15 @@ const prices = {
     count: chargers.chargers.length,
     path: 'chargers.json'
   },
-  ...(tariffProblems.length ? {} : { evTariffs })
+  ...(tariffProblems.length ? {} : { evTariffs }),
+  ...(history ? { history } : {})
 };
 
 await fs.rm(OUT, { recursive: true, force: true });
 await fs.mkdir(OUT, { recursive: true });
 await fs.writeFile(path.join(OUT, 'prices.json'), JSON.stringify(prices));
 await fs.writeFile(path.join(OUT, 'chargers.json'), JSON.stringify(chargers));
+if (history) await fs.cp(path.join(ROOT, 'history'), path.join(OUT, 'history'), { recursive: true });
 await fs.writeFile(
   path.join(OUT, 'index.html'),
   `<!doctype html><meta charset="utf-8"><title>TankoljOkosan árak</title>
@@ -99,6 +116,7 @@ Frissítve: ${prices.publishedAt}. Kútárak forrása: ${stationPrices.source}, 
 );
 console.log(`_site/prices.json: ${stationPrices.count} priced stations (checked ${stationPrices.checkedAt}), averages of ${priceReference.date}`);
 console.log(`_site/chargers.json: ${chargers.chargers.length} charging sites (OSM ${chargers.meta.osmTimestamp})`);
+console.log(history ? `_site/history: since ${history.from}, updated ${history.updatedAt}` : '_site/history: none yet');
 if (tariffProblems.length) {
   // The files above are still published (the prices keep flowing); the failed step makes the error visible in Actions
   process.exitCode = 1;
