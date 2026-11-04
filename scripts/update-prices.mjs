@@ -8,6 +8,10 @@
 //     (Euro-super 95, automotive diesel, LPG) in EUR per 1000 l, published weekly (prices of Monday)
 //   - European Central Bank euro reference rates, to convert EUR to HUF on the bulletin's price date
 // Per-station prices are not published as open data in Hungary; see src/data/stationsData.js for the estimates.
+//
+// Each bulletin week is also kept in history/official-averages.json, a time series that is never cut: one entry per
+// price date, added when first seen and only changed when the bulletin itself revises that week (for the learned
+// price estimate later, see docs/claude/arbejelentes-es-szerver.md, "Archívum"). Only official public data goes in.
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -16,6 +20,7 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const OUT_FILE = path.join(ROOT, 'src', 'data', 'priceReference.json');
+const HISTORY_FILE = path.join(ROOT, 'history', 'official-averages.json');
 const BULLETIN_PAGE = 'https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en';
 const BULLETIN_LATEST = 'https://energy.ec.europa.eu/document/download/264c2d0f-f161-4ea3-a777-78faae59bea0_en';
 const ECB_RATES = 'https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist-90d.xml';
@@ -88,11 +93,15 @@ function parseBulletin(rows) {
   const hu = rows.find(r => /^Hungary$/i.test(String(r.A).trim()));
   if (!hu) throw new Error('Hungary not in the bulletin');
   const eurPerLitre = {};
+  const eurPer1000l = {};
   for (const [key, c] of Object.entries(cols)) {
     const v = Number(hu[c]);
-    if (c && v > 0) eurPerLitre[key] = v / 1000;
+    if (c && v > 0) {
+      eurPerLitre[key] = v / 1000;
+      eurPer1000l[key] = v;
+    }
   }
-  return { date, eurPerLitre };
+  return { date, eurPerLitre, eurPer1000l };
 }
 
 // EUR/HUF on the given day, or the last working day before it
@@ -106,6 +115,36 @@ function eurHufOn(xml, date) {
   return hit;
 }
 
+// Adds the week to the time series, or updates it when the bulletin revised it; the file is only rewritten on a change
+async function recordWeek(out, eurPer1000l) {
+  let history = { weeks: [] };
+  try {
+    history = JSON.parse(await fs.readFile(HISTORY_FILE, 'utf8'));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e; // a broken file is not replaced by a new, shorter one
+  }
+  const week = { date: out.date, averages: out.averages, eurPer1000l, eurHuf: out.eurHuf, eurHufDate: out.eurHufDate };
+  const old = history.weeks.find(w => w.date === out.date);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // a week filled in from the git history has no EUR prices yet (eurPer1000l: null): adding them is no revision
+  const revised = old && (!same(old.averages, week.averages) || old.eurHuf !== week.eurHuf || (old.eurPer1000l && !same(old.eurPer1000l, eurPer1000l)));
+  if (old && !revised && same(old.eurPer1000l, eurPer1000l)) return;
+  const entry = old
+    ? { ...old, ...week, ...(revised ? { revisedAt: out.fetchedAt } : {}) }
+    : { ...week, firstSeenAt: out.fetchedAt };
+  const weeks = [...history.weeks.filter(w => w.date !== out.date), entry].sort((a, b) => (a.date < b.date ? -1 : 1));
+  const file = {
+    about: 'Hivatalos magyar országos átlagárak hetente (Ft/l; a közlöny hétfői árai), az EKB EUR/HUF árfolyamával átszámítva. Nem írjuk felül: hetente egy bejegyzés.',
+    source: out.source,
+    sourceUrl: out.sourceUrl,
+    updatedAt: out.fetchedAt,
+    weeks
+  };
+  await fs.mkdir(path.dirname(HISTORY_FILE), { recursive: true });
+  await fs.writeFile(HISTORY_FILE, `${JSON.stringify(file, null, 2)}\n`);
+  console.log(`Idősor: ${old ? 'javított hét' : 'új hét'} (${out.date}), összesen ${weeks.length} hét`);
+}
+
 async function main() {
   if (SOFT) {
     try {
@@ -117,7 +156,7 @@ async function main() {
   }
 
   const [xlsx, ecb] = await Promise.all([download(BULLETIN_LATEST), download(ECB_RATES)]);
-  const { date, eurPerLitre } = parseBulletin(readSheet(xlsx));
+  const { date, eurPerLitre, eurPer1000l } = parseBulletin(readSheet(xlsx));
   const fx = eurHufOn(ecb.toString('utf8'), date);
   const averages = Object.fromEntries(Object.entries(eurPerLitre).map(([k, eur]) => [k, Math.round(eur * fx.rate)]));
   if (!(averages.benzin95 > 300 && averages.benzin95 < 1500 && averages.diesel > 300 && averages.diesel < 1500)) {
@@ -134,6 +173,7 @@ async function main() {
     averages
   };
   await fs.writeFile(OUT_FILE, `${JSON.stringify(out, null, 2)}\n`);
+  await recordWeek(out, eurPer1000l);
   console.log(`Országos átlagárak (${date}): 95: ${averages.benzin95} Ft, dízel: ${averages.diesel} Ft, LPG: ${averages.lpg ?? '—'} Ft (1 EUR = ${fx.rate} HUF, ${fx.time})`);
 }
 

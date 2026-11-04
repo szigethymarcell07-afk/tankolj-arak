@@ -1,0 +1,76 @@
+{
+  "about": "Hivatalos magyar országos átlagárak hetente (Ft/l; a közlöny hétfői árai), az EKB EUR/HUF árfolyamával átszámítva. Nem írjuk felül: hetente egy bejegyzés.",
+  "source": "Európai Bizottság – Weekly Oil Bulletin (fogyasztói árak adókkal), EKB-árfolyam",
+  "sourceUrl": "https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en",
+  "updatedAt": "2026-11-04T18:29:41.916Z",
+  "weeks": [
+    {
+      "date": "2026-09-21",
+      "averages": {
+        "benzin95": 635,
+        "diesel": 709,
+        "lpg": 352
+      },
+      "eurPer1000l": null,
+      "eurHuf": 362.4,
+      "eurHufDate": "2026-09-21",
+      "firstSeenAt": "2026-09-27T12:55:44.772Z",
+      "backfilled": true
+    },
+    {
+      "date": "2026-09-28",
+      "averages": {
+        "benzin95": 635,
+        "diesel": 709,
+        "lpg": 361
+      },
+      "eurPer1000l": null,
+      "eurHuf": 367.1,
+      "eurHufDate": "2026-09-28",
+      "firstSeenAt": "2026-09-30T20:04:23.744Z",
+      "backfilled": true
+    },
+    {
+      "date": "2026-10-05",
+      "averages": {
+        "benzin95": 635,
+        "diesel": 709,
+        "lpg": 362
+      },
+      "eurPer1000l": null,
+      "eurHuf": 367.8,
+      "eurHufDate": "2026-10-05",
+      "firstSeenAt": "2026-10-07T16:06:27.441Z",
+      "backfilled": true
+    },
+    {
+      "date": "2026-10-26",
+      "averages": {
+        "benzin95": 645,
+        "diesel": 709,
+        "lpg": 376
+      },
+      "eurPer1000l": null,
+      "eurHuf": 367.45,
+      "eurHufDate": "2026-10-26",
+      "firstSeenAt": "2026-11-01T09:37:51.520Z",
+      "backfilled": true
+    },
+    {
+      "date": "2026-11-02",
+      "averages": {
+        "benzin95": 638,
+        "diesel": 721,
+        "lpg": 386
+      },
+      "eurPer1000l": {
+        "benzin95": 1750.006063100137,
+        "diesel": 1978.3769821673525,
+        "lpg": 1058.0860082304525
+      },
+      "eurHuf": 364.5,
+      "eurHufDate": "2026-11-02",
+      "firstSeenAt": "2026-11-04T18:29:41.916Z"
+    }
+  ]
+}
