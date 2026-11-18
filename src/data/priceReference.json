@@ -1,13 +1,13 @@
 {
-  "date": "2026-11-09",
-  "fetchedAt": "2026-11-18T11:06:13.824Z",
+  "date": "2026-11-16",
+  "fetchedAt": "2026-11-18T18:06:11.064Z",
   "source": "Európai Bizottság – Weekly Oil Bulletin (fogyasztói árak adókkal), EKB-árfolyam",
   "sourceUrl": "https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en",
-  "eurHuf": 362.99,
-  "eurHufDate": "2026-11-09",
+  "eurHuf": 364.35,
+  "eurHufDate": "2026-11-16",
   "averages": {
-    "benzin95": 607,
-    "diesel": 720,
-    "lpg": 400
+    "benzin95": 594,
+    "diesel": 700,
+    "lpg": 420
   }
 }

@@ -2,7 +2,7 @@
   "about": "Hivatalos magyar országos átlagárak hetente (Ft/l; a közlöny hétfői árai), az EKB EUR/HUF árfolyamával átszámítva. Nem írjuk felül: hetente egy bejegyzés.",
   "source": "Európai Bizottság – Weekly Oil Bulletin (fogyasztói árak adókkal), EKB-árfolyam",
   "sourceUrl": "https://energy.ec.europa.eu/data-and-analysis/weekly-oil-bulletin_en",
-  "updatedAt": "2026-11-11T20:06:12.027Z",
+  "updatedAt": "2026-11-18T18:06:11.064Z",
   "weeks": [
     {
       "date": "2026-09-21",
@@ -87,6 +87,22 @@
       "eurHuf": 362.99,
       "eurHufDate": "2026-11-09",
       "firstSeenAt": "2026-11-11T20:06:12.027Z"
+    },
+    {
+      "date": "2026-11-16",
+      "averages": {
+        "benzin95": 594,
+        "diesel": 700,
+        "lpg": 420
+      },
+      "eurPer1000l": {
+        "benzin95": 1629.8347513308775,
+        "diesel": 1922.057283490162,
+        "lpg": 1152.6971785846777
+      },
+      "eurHuf": 364.35,
+      "eurHufDate": "2026-11-16",
+      "firstSeenAt": "2026-11-18T18:06:11.064Z"
     }
   ]
 }
